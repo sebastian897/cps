@@ -2,36 +2,40 @@
 Imports System.Windows.Media
 Imports System.Windows.Shapes
 
-Structure rect
-    Public dragging As Boolean
-    Public shape As Rectangle
-
-    Public Sub New(d As Boolean, r As Rectangle)
-        dragging = d
-        shape = r
-    End Sub
-End Structure
-
-
 Class MainWindow
 
     Private dragging As Boolean = False
     Private clickPosition As Point
+    Dim rows As Integer = 9
+    Dim cols As Integer = 9
+    Dim sqrLength As Double = 100
+    Dim sqrSkirt = 3
+    Dim spacing As Double = sqrLength / 20  ' space between rectangles
+    Private Function BuildShape() As Path
+
+        ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
+        Dim geometryGroup As New GeometryGroup()
+
+        For i = 0 To 2
+            For j = 0 To 2
+                Dim rand As New Random()
+                If rand.Next(0, 2) Then
+                    Dim rectGeometry As New RectangleGeometry(New Rect(i * (sqrLength + spacing), j * (sqrLength + spacing), sqrLength, sqrLength))
+                    geometryGroup.Children.Add(rectGeometry)
+                End If
+            Next
+        Next
+
+        Dim path As New Path() With {
+                .Data = geometryGroup,
+                .Fill = Brushes.Green
+            }
+        Return path
+    End Function
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
-        Dim rows As Integer = 9
-        Dim cols As Integer = 9
-        Dim sqrLength As Double = 100
-        Dim sqrSkirt = 3
-        Dim spacing As Double = sqrLength / 20  ' space between rectangles
-        Dim sqrs As New List(Of rect)
-        For i = 0 To 4
-            sqrs.Add(New rect(False, New Rectangle With {
-                    .Width = sqrLength,
-                    .Height = sqrLength,
-                    .Fill = New SolidColorBrush(Color.FromRgb(220, 210, 30)),
-                    .StrokeThickness = sqrSkirt,
-                    .Stroke = New SolidColorBrush(Color.FromRgb(210, 200, 20))
-                }))
+        Dim sqrs As New List(Of Path)
+        For i = 0 To 0
+            sqrs.Add(BuildShape())
         Next i
 
         For row = 0 To rows - 1
@@ -69,44 +73,40 @@ Class MainWindow
         Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
 
         For i = 0 To sqrs.Count - 1
-            Canvas.SetLeft(sqrs(i).shape, 50)
-            Canvas.SetTop(sqrs(i).shape, 50)
+            Canvas.SetLeft(sqrs(i), 50)
+            Canvas.SetTop(sqrs(i), 50)
 
-            AddHandler sqrs(i).shape.MouseLeftButtonDown, AddressOf Rect_MouseLeftButtonDown
-            AddHandler sqrs(i).shape.MouseMove, AddressOf Rect_MouseMove
-            AddHandler sqrs(i).shape.MouseLeftButtonUp, AddressOf Rect_MouseLeftButtonUp
+            AddHandler sqrs(i).MouseLeftButtonDown, AddressOf Path_MouseLeftButtonDown
+            AddHandler sqrs(i).MouseMove, AddressOf Path_MouseMove
+            AddHandler sqrs(i).MouseLeftButtonUp, AddressOf path_MouseLeftButtonUp
 
-            MyCanvas.Children.Add(sqrs(i).shape)
+            MyCanvas.Children.Add(sqrs(i))
         Next i
     End Sub
-    Private Sub Rect_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
+    Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
-        Dim rect = DirectCast(sender, Rectangle)
-        clickPosition = e.GetPosition(rect)
-        rect.CaptureMouse()
+        Dim p = DirectCast(sender, Path)
+        clickPosition = e.GetPosition(p)
+        p.CaptureMouse()
     End Sub
-    Private Sub Rect_MouseMove(sender As Object, e As MouseEventArgs)
+    Private Sub Path_MouseMove(sender As Object, e As MouseEventArgs)
         If dragging Then
-            Dim rect = DirectCast(sender, Rectangle)
+            Dim p = DirectCast(sender, Path)
             Dim canvasPos = e.GetPosition(MyCanvas)
 
             ' Calculate new position taking the click offset into account
             Dim newLeft = canvasPos.X - clickPosition.X
             Dim newTop = canvasPos.Y - clickPosition.Y
 
-            ' Optional: constrain within canvas bounds
-            newLeft = Math.Max(0, Math.Min(newLeft, MyCanvas.ActualWidth - rect.Width))
-            newTop = Math.Max(0, Math.Min(newTop, MyCanvas.ActualHeight - rect.Height))
-
-            Canvas.SetLeft(rect, newLeft)
-            Canvas.SetTop(rect, newTop)
+            Canvas.SetLeft(p, newLeft)
+            Canvas.SetTop(p, newTop)
         End If
     End Sub
 
-    Private Sub Rect_MouseLeftButtonUp(sender As Object, e As MouseButtonEventArgs)
+    Private Sub Path_MouseLeftButtonUp(sender As Object, e As MouseButtonEventArgs)
         dragging = False
-        Dim rect = DirectCast(sender, Rectangle)
-        rect.ReleaseMouseCapture()
+        Dim p = DirectCast(sender, Path)
+        p.ReleaseMouseCapture()
     End Sub
 
 End Class
