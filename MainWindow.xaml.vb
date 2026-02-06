@@ -39,12 +39,14 @@ Class MainWindow
             For col = 0 To cols - 1
                 Dim leftPos As Double = col * (sqrLength + spacing)
                 Dim topPos As Double = row * (sqrLength + spacing)
-                If Canvas.GetLeft(p) > leftPos And Canvas.GetLeft(p) < leftPos + (sqrLength + spacing) And Canvas.GetTop(p) > topPos And Canvas.GetTop(p) < topPos + (sqrLength + spacing) Then
+                If Canvas.GetLeft(p) + sqrLength / 2 > leftPos And Canvas.GetLeft(p) + sqrLength / 2 < leftPos + (sqrLength + spacing) And Canvas.GetTop(p) + sqrLength / 2 > topPos And Canvas.GetTop(p) + sqrLength / 2 < topPos + (sqrLength + spacing) Then
                     Dim newp As New Path()
                     newp.Data = p.Data
                     newp.Fill = p.Fill
                     newp.Opacity = 0.5
                     newp.Tag = "shadow"
+                    newp.IsHitTestVisible = False
+                    newp.Stroke = Brushes.Green
                     Canvas.SetLeft(newp, leftPos)
                     Canvas.SetTop(newp, topPos)
                     Return newp
@@ -53,10 +55,9 @@ Class MainWindow
         Next row
     End Function
     Private currentShadow As Path
+    Private grid(8, 8) As Rectangle
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         MyCanvas.Children.Clear()
-
-
 
         Dim sqrs As New List(Of Path)
         For i = 0 To 0
@@ -107,13 +108,6 @@ Class MainWindow
 
             MyCanvas.Children.Add(sqrs(i))
         Next i
-
-        For Each p As Path In MyCanvas.Children.OfType(Of Path)()
-            Debug.WriteLine($"Tag = [{p.Tag}]")
-        Next
-
-
-
     End Sub
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
@@ -150,6 +144,28 @@ Class MainWindow
         dragging = False
         Dim p = DirectCast(sender, Path)
         p.ReleaseMouseCapture()
+        Dim gg = TryCast(p.Data, GeometryGroup)
+
+        If gg IsNot Nothing Then
+            Dim pathLeft = Canvas.GetLeft(currentShadow)
+            Dim pathTop = Canvas.GetTop(currentShadow)
+
+            For Each rg As RectangleGeometry In gg.Children.OfType(Of RectangleGeometry)()
+                Dim r As New Rectangle With {
+                    .Width = sqrLength,
+                    .Height = sqrLength,
+                    .Fill = p.Fill
+                }
+                Dim canvasX = pathLeft + rg.Rect.X
+                Dim canvasY = pathTop + rg.Rect.Y
+                Canvas.SetLeft(r, canvasX)
+                Canvas.SetTop(r, canvasY)
+                grid(canvasX / (sqrLength + spacing), canvasY / (sqrLength + spacing)) = r
+                MyCanvas.Children.Add(r)
+            Next
+            MyCanvas.Children.Remove(p)
+            MyCanvas.children.Remove(currentShadow)
+        End If
     End Sub
 
 End Class
