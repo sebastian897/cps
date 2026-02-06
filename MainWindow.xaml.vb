@@ -11,6 +11,8 @@ Class MainWindow
     Dim sqrLength As Double = 100
     Dim sqrSkirt = 3
     Dim spacing As Double = sqrLength / 20  ' space between rectangles
+    Dim extraWindowWidth = 40
+    Dim extraWindowHeight = 60
     Private Function BuildShape() As Path
 
         ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
@@ -32,7 +34,25 @@ Class MainWindow
             }
         Return path
     End Function
+    Private Function BuildShadow(w As Integer, h As Integer, ByVal p As Path) As Path
+        For row = 0 To rows - 1
+            For col = 0 To cols - 1
+                Dim leftPos As Double = col * (sqrLength + spacing)
+                Dim topPos As Double = row * (sqrLength + spacing)
+                If Canvas.GetLeft(p) > leftPos And Canvas.GetLeft(p) < leftPos + (sqrLength + spacing) And Canvas.GetTop(p) > topPos And Canvas.GetTop(p) < topPos + (sqrLength + spacing) Then
+                    Dim newp As New Path()
+                    newp.Data = p.Data
+                    newp.Fill = p.Fill
+                    newp.Opacity = 0.5
+                    Canvas.SetLeft(newp, leftPos)
+                    Canvas.SetLeft(newp, leftPos)
+                    Return newp
+                End If
+            Next col
+        Next row
+    End Function
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
+        MyCanvas.Children.Clear()
         Dim sqrs As New List(Of Path)
         For i = 0 To 0
             sqrs.Add(BuildShape())
@@ -67,8 +87,8 @@ Class MainWindow
         MyCanvas.Height = totalHeight
 
         ' Adjust Window size to fit Canvas plus window borders
-        Me.Width = totalWidth + 40   ' Add some margin for window chrome
-        Me.Height = totalHeight + 60
+        Me.Width = totalWidth + extraWindowWidth   ' Add some margin for window chrome
+        Me.Height = totalHeight + extraWindowHeight
         Me.ResizeMode = ResizeMode.NoResize
         Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
 
@@ -78,7 +98,7 @@ Class MainWindow
 
             AddHandler sqrs(i).MouseLeftButtonDown, AddressOf Path_MouseLeftButtonDown
             AddHandler sqrs(i).MouseMove, AddressOf Path_MouseMove
-            AddHandler sqrs(i).MouseLeftButtonUp, AddressOf path_MouseLeftButtonUp
+            AddHandler sqrs(i).MouseLeftButtonUp, AddressOf Path_MouseLeftButtonUp
 
             MyCanvas.Children.Add(sqrs(i))
         Next i
@@ -100,6 +120,11 @@ Class MainWindow
 
             Canvas.SetLeft(p, newLeft)
             Canvas.SetTop(p, newTop)
+
+            Dim sp = BuildShadow(newLeft, newTop, p)
+            If sp IsNot Nothing Then
+                MyCanvas.Children.Add(sp)
+            End If
         End If
     End Sub
 
