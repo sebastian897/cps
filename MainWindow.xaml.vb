@@ -44,15 +44,20 @@ Class MainWindow
                     newp.Data = p.Data
                     newp.Fill = p.Fill
                     newp.Opacity = 0.5
+                    newp.Tag = "shadow"
                     Canvas.SetLeft(newp, leftPos)
-                    Canvas.SetLeft(newp, leftPos)
+                    Canvas.SetTop(newp, topPos)
                     Return newp
                 End If
             Next col
         Next row
     End Function
+    Private currentShadow As Path
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         MyCanvas.Children.Clear()
+
+
+
         Dim sqrs As New List(Of Path)
         For i = 0 To 0
             sqrs.Add(BuildShape())
@@ -102,6 +107,13 @@ Class MainWindow
 
             MyCanvas.Children.Add(sqrs(i))
         Next i
+
+        For Each p As Path In MyCanvas.Children.OfType(Of Path)()
+            Debug.WriteLine($"Tag = [{p.Tag}]")
+        Next
+
+
+
     End Sub
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
@@ -121,9 +133,15 @@ Class MainWindow
             Canvas.SetLeft(p, newLeft)
             Canvas.SetTop(p, newTop)
 
+            If currentShadow IsNot Nothing AndAlso MyCanvas.Children.Contains(currentShadow) Then
+                MyCanvas.Children.Remove(currentShadow)
+            End If
+
+            ' Create a new shadow
             Dim sp = BuildShadow(newLeft, newTop, p)
             If sp IsNot Nothing Then
                 MyCanvas.Children.Add(sp)
+                currentShadow = sp ' store reference to the latest shadow
             End If
         End If
     End Sub
