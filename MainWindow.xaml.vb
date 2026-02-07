@@ -16,7 +16,6 @@ Class MainWindow
     Dim piecesHeight As Double = (sqrLength + spacing) * 3
 
     Private Function BuildShape() As Path
-
         ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
         Dim rand As New Random()
         Dim geometryGroup As New GeometryGroup()
@@ -58,10 +57,10 @@ Class MainWindow
         For i = 0 To gg.Children.OfType(Of RectangleGeometry)().ToList().Count - 1
             Dim rg = gg.Children.OfType(Of RectangleGeometry)().ToList()(i)
             If rg IsNot Nothing Then
-                Dim canvasX = w + rg.Rect.X
-                Dim canvasY = h + rg.Rect.Y
-                Dim X = canvasX \ (sqrLength + spacing)
-                Dim Y = canvasY \ (sqrLength + spacing)
+                Dim canvasX = rg.Rect.X
+                Dim canvasY = rg.Rect.Y
+                Dim X = w + canvasX \ (sqrLength + spacing)
+                Dim Y = h + canvasY \ (sqrLength + spacing)
                 If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse g(X, Y) IsNot Nothing Then
                     Return False
                 End If
@@ -82,21 +81,28 @@ Class MainWindow
         Next row
         Return positions
     End Function
-    Function CanPLayerPlaceShapes(ByVal g(,) As Rectangle, ByVal s As List(Of Path)) As Boolean
-        If s.count = 0 Then Return True
-        For i = 0 To s.count - 1
+    Function CanPLayerPlaceShapes(ByVal g(,) As Rectangle, ByRef s As List(Of Path)) As Boolean
+        If s.Count = 0 Then
+            Return True ' Base case: no shapes left to place
+        End If
+        For i = s.Count - 1 To 0 Step -1
             Dim validPos = GetValidPositions(s(i), g)
-            If validPos.Count = 0 Then Return False
+            If validPos.Count = 0 Then
+                Return False
+            End If
             For Each pos In validPos
-                Dim newg = PlaceShapeInGrid(pos, s(i), g)
-                If CanPLayerPlaceShapes(DeepCopyGrid(newg), s) = False Then
-                    Return False
+                Dim newg = DeepCopyGrid(g)
+                newg = PlaceShapeInGrid(pos, s(i), newg)
+                Dim newShapes As New List(Of Path)(s)
+                newShapes.RemoveAt(i)
+                If CanPLayerPlaceShapes(newg, newShapes, depth + 1) Then
+                    Return True
                 End If
-                s.RemoveAt(i)
             Next pos
         Next i
-        Return True
+        Return False
     End Function
+
     Private Function BuildShadow(w As Integer, h As Integer, ByVal p As Path) As Path
         Dim gg = TryCast(p.Data, GeometryGroup)
         If gg Is Nothing Then Return Nothing
@@ -120,7 +126,7 @@ Class MainWindow
 
                     Dim scaleTransform As New ScaleTransform(1, 1, centerX, centerY)
                     newp.Data.Transform = scaleTransform
-                    If Not DoesShapeFit(leftPos, topPos, newp, grid) Then
+                    If Not DoesShapeFit(col, row, newp, grid) Then
                         Continue For
                     End If
                     Canvas.SetLeft(newp, leftPos)
@@ -151,7 +157,10 @@ Class MainWindow
                     ' Create a new Rectangle with the same properties
                     Dim r As New Rectangle With {
                     .Width = originalGrid(i, j).Width,
-                    .Height = originalGrid(i, j).Height
+                    .Height = originalGrid(i, j).Height,
+                    .Fill = originalGrid(i, j).Fill,
+                    .Stroke = originalGrid(i, j).Stroke,
+                    .StrokeThickness = originalGrid(i, j).StrokeThickness
                 }
                     ' Position on Canvas also matters if you track it
                     Canvas.SetLeft(r, Canvas.GetLeft(originalGrid(i, j)))
@@ -163,7 +172,6 @@ Class MainWindow
                 End If
             Next
         Next
-
         Return newGrid
     End Function
     Private currentShadow As Path
@@ -222,9 +230,7 @@ Class MainWindow
     End Sub
     Sub ShapesHandler()
         For i = 0 To shapes.Count - 1
-
             ResetShape(shapes(i), i)
-
 
             AddHandler shapes(i).MouseLeftButtonDown, AddressOf Path_MouseLeftButtonDown
             AddHandler shapes(i).MouseMove, AddressOf Path_MouseMove
@@ -232,7 +238,6 @@ Class MainWindow
 
             MyCanvas.Children.Add(shapes(i))
         Next i
-
     End Sub
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
@@ -340,17 +345,19 @@ Class MainWindow
     End Function
     Function ReloadShapes() As List(Of Path)
         Dim newShapes As New List(Of Path)
+        Dim attempts As Integer = 0
         While newShapes.Count < 3
+            attempts += 1
             Dim shape = BuildShape()
             newShapes.Add(shape)
-            If CanPLayerPlaceShapes(DeepCopyGrid(grid), newShapes) Then
+            If Not CanPLayerPlaceShapes(DeepCopyGrid(grid), newShapes) Then
                 newShapes.Clear()
             End If
         End While
+
         Return newShapes
     End Function
     Function IsRowFull(grid As Rectangle(,)) As Integer
-
         For row = 0 To rows - 1
             Dim rowCount = 0
             For col = 0 To cols - 1
