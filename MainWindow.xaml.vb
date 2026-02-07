@@ -39,25 +39,33 @@ Class MainWindow
     Private Function BuildShadow(w As Integer, h As Integer, ByVal p As Path) As Path
         Dim gg = TryCast(p.Data, GeometryGroup)
         If gg Is Nothing Then Return Nothing
+        Dim topShape As Double = Double.maxValue
+        Dim leftShape As Double = Double.maxValue
+        For i = 0 To gg.Children.OfType(Of RectangleGeometry)().ToList().Count - 1
+            Dim rg = gg.Children.OfType(Of RectangleGeometry)().ToList()(i)
+            If rg IsNot Nothing Then
+                Dim rx = rg.Rect.X / (sqrLength + spacing)
+                Dim ry = rg.Rect.Y / (sqrLength + spacing)
+                If topShape > ry Then
+                    topShape = ry
+                End If
+                If rx < leftShape Then
+                    leftShape = rx
+                End If
+                Dim canvasX = w + rg.Rect.X
+                Dim canvasY = h + rg.Rect.Y
+                Dim X = canvasX / (sqrLength + spacing)
+                Dim Y = canvasY / (sqrLength + spacing)
+                If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse grid(X, Y) IsNot Nothing Then
+                    Return Nothing
+                End If
+            End If
+        Next i
+        debug.print("topShape: " & topShape & " leftShape: " & leftShape)
         For row = 0 To rows - 1
             For col = 0 To cols - 1
-                For Each rg As RectangleGeometry In gg.Children.OfType(Of RectangleGeometry)()
-                    If rg IsNot Nothing Then
-                        Dim canvasX = w + rg.Rect.X
-                        Dim canvasY = h + rg.Rect.Y
-                        Dim X = canvasX / (sqrLength + spacing)
-                        Dim Y = canvasY / (sqrLength + spacing)
-                        If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse grid(X, Y) IsNot Nothing Then
-                            Return Nothing
-                        End If
-                    End If
-                Next rg
-            Next col
-        Next row
-        For row = 0 To rows - 1
-            For col = 0 To cols - 1
-                Dim leftPos As Double = col * (sqrLength + spacing)
-                Dim topPos As Double = row * (sqrLength + spacing)
+                Dim leftPos As Double = col * (sqrLength + spacing) - leftShape * (sqrLength + spacing)
+                Dim topPos As Double = row * (sqrLength + spacing) - topShape * (sqrLength + spacing)
                 If Canvas.GetLeft(p) + sqrLength / 2 > leftPos And Canvas.GetLeft(p) + sqrLength / 2 < leftPos + (sqrLength + spacing) And Canvas.GetTop(p) + sqrLength / 2 > topPos And Canvas.GetTop(p) + sqrLength / 2 < topPos + (sqrLength + spacing) Then
                     Dim newp As New Path()
                     newp.Data = p.Data
