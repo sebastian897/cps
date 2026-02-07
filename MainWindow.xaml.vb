@@ -9,10 +9,12 @@ Class MainWindow
     Dim rows As Integer = 9
     Dim cols As Integer = 9
     Dim sqrLength As Double = 100
-    Dim sqrSkirt = 3
+    Dim shapeskirt = 3
     Dim spacing As Double = sqrLength / 20  ' space between rectangles
     Dim extraWindowWidth = 40
-    Dim extraWindowHeight = 60
+    Dim extraWindowHeight = 40
+    Dim piecesHeight As Double = (sqrLength + spacing) * 3
+
     Private Function BuildShape() As Path
 
         ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
@@ -35,6 +37,23 @@ Class MainWindow
         Return path
     End Function
     Private Function BuildShadow(w As Integer, h As Integer, ByVal p As Path) As Path
+        Dim gg = TryCast(p.Data, GeometryGroup)
+        If gg Is Nothing Then Return Nothing
+        For row = 0 To rows - 1
+            For col = 0 To cols - 1
+                For Each rg As RectangleGeometry In gg.Children.OfType(Of RectangleGeometry)()
+                    If rg IsNot Nothing Then
+                        Dim canvasX = w + rg.Rect.X
+                        Dim canvasY = h + rg.Rect.Y
+                        Dim X = canvasX / (sqrLength + spacing)
+                        Dim Y = canvasY / (sqrLength + spacing)
+                        If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse grid(X, Y) IsNot Nothing Then
+                            Return Nothing
+                        End If
+                    End If
+                Next rg
+            Next col
+        Next row
         For row = 0 To rows - 1
             For col = 0 To cols - 1
                 Dim leftPos As Double = col * (sqrLength + spacing)
@@ -47,6 +66,14 @@ Class MainWindow
                     newp.Tag = "shadow"
                     newp.IsHitTestVisible = False
                     newp.Stroke = Brushes.Green
+
+                    ' Optionally, scale around a center point (e.g., center of bounding box)
+                    Dim bounds As Rect = newp.Data.Bounds
+                    Dim centerX As Double = bounds.X + bounds.Width / 2
+                    Dim centerY As Double = bounds.Y + bounds.Height / 2
+
+                    Dim scaleTransform As New ScaleTransform(1, 1, centerX, centerY)
+                    newp.Data.Transform = scaleTransform
                     Canvas.SetLeft(newp, leftPos)
                     Canvas.SetTop(newp, topPos)
                     Return newp
@@ -56,13 +83,20 @@ Class MainWindow
     End Function
     Private currentShadow As Path
     Private grid(8, 8) As Rectangle
+    Dim shapes As New List(Of Path)
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         MyCanvas.Children.Clear()
+        shapes = ReloadShapes()
+        Dim totalWidth As Double = cols * (sqrLength + spacing) - spacing
+        Dim totalHeight As Double = rows * (sqrLength + spacing) - spacing + piecesHeight
 
-        Dim sqrs As New List(Of Path)
-        For i = 0 To 0
-            sqrs.Add(BuildShape())
-        Next i
+        ' Adjust Window size to fit Canvas plus window borders
+        Me.WindowStartupLocation = WindowStartupLocation.Manual
+        Me.SizeToContent = SizeToContent.Manual
+        Me.Width = totalWidth + extraWindowWidth  ' Add some margin for window chrome
+        Me.Height = totalHeight + extraWindowHeight
+        Me.ResizeMode = ResizeMode.NoResize
+        Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
 
         For row = 0 To rows - 1
             For col = 0 To cols - 1
@@ -70,7 +104,7 @@ Class MainWindow
                     .Width = sqrLength,
                     .Height = sqrLength,
                     .Fill = New SolidColorBrush(Color.FromRgb(30, 30, 30)),
-                    .StrokeThickness = sqrSkirt,
+                    .StrokeThickness = shapeskirt,
                     .Stroke = New SolidColorBrush(Color.FromRgb(42, 42, 42))
                 }
 
@@ -85,30 +119,37 @@ Class MainWindow
             Next
         Next
 
-        Dim totalWidth As Double = cols * (sqrLength + spacing) - spacing
-        Dim totalHeight As Double = rows * (sqrLength + spacing) - spacing
-
         ' Set Canvas size explicitly
         MyCanvas.Width = totalWidth
         MyCanvas.Height = totalHeight
-
-        ' Adjust Window size to fit Canvas plus window borders
-        Me.Width = totalWidth + extraWindowWidth   ' Add some margin for window chrome
-        Me.Height = totalHeight + extraWindowHeight
-        Me.ResizeMode = ResizeMode.NoResize
-        Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
-
-        For i = 0 To sqrs.Count - 1
-            Canvas.SetLeft(sqrs(i), 50)
-            Canvas.SetTop(sqrs(i), 50)
-
-            AddHandler sqrs(i).MouseLeftButtonDown, AddressOf Path_MouseLeftButtonDown
-            AddHandler sqrs(i).MouseMove, AddressOf Path_MouseMove
-            AddHandler sqrs(i).MouseLeftButtonUp, AddressOf Path_MouseLeftButtonUp
-
-            MyCanvas.Children.Add(sqrs(i))
-        Next i
+        ShapesHandler()
     End Sub
+    Function ResetShape(shape, i)
+        Canvas.SetLeft(shape, i * piecesHeight)
+        Canvas.SetTop(shape, piecesHeight * 3)
+
+        ' Optionally, scale around a center point (e.g., center of bounding box)
+        Dim bounds As Rect = shape.Data.Bounds
+        Dim centerX As Double = bounds.X + bounds.Width / 2
+        Dim centerY As Double = bounds.Y + bounds.Height / 2
+
+        Dim scaleTransform As New ScaleTransform(2 / 3, 2 / 3, centerX, centerY)
+        shape.Data.Transform = scaleTransform
+    End Function
+    Function ShapesHandler()
+        For i = 0 To shapes.Count - 1
+
+            ResetShape(shapes(i), i)
+
+
+            AddHandler shapes(i).MouseLeftButtonDown, AddressOf Path_MouseLeftButtonDown
+            AddHandler shapes(i).MouseMove, AddressOf Path_MouseMove
+            AddHandler shapes(i).MouseLeftButtonUp, AddressOf Path_MouseLeftButtonUp
+
+            MyCanvas.Children.Add(shapes(i))
+        Next i
+
+    End Function
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
         Dim p = DirectCast(sender, Path)
@@ -136,6 +177,8 @@ Class MainWindow
             If sp IsNot Nothing Then
                 MyCanvas.Children.Add(sp)
                 currentShadow = sp ' store reference to the latest shadow
+            Else
+                currentShadow = Nothing
             End If
         End If
     End Sub
@@ -146,7 +189,7 @@ Class MainWindow
         p.ReleaseMouseCapture()
         Dim gg = TryCast(p.Data, GeometryGroup)
 
-        If gg IsNot Nothing Then
+        If currentShadow IsNot Nothing Then
             Dim pathLeft = Canvas.GetLeft(currentShadow)
             Dim pathTop = Canvas.GetTop(currentShadow)
 
@@ -158,14 +201,76 @@ Class MainWindow
                 }
                 Dim canvasX = pathLeft + rg.Rect.X
                 Dim canvasY = pathTop + rg.Rect.Y
+                Dim X = canvasX / (sqrLength + spacing)
+                Dim Y = canvasY / (sqrLength + spacing)
+                If X < 0 Or X > 8 Or Y < 0 Or Y > 8 Then
+                    MyCanvas.children.Remove(currentShadow)
+                    currentShadow = Nothing
+                    ResetShape(p, shapes.IndexOf(p))
+                    Exit Sub
+                End If
                 Canvas.SetLeft(r, canvasX)
                 Canvas.SetTop(r, canvasY)
-                grid(canvasX / (sqrLength + spacing), canvasY / (sqrLength + spacing)) = r
+                grid(X, Y) = r
                 MyCanvas.Children.Add(r)
             Next
+            shapes.remove(p)
+            If shapes.Count = 0 Then
+                shapes = ReloadShapes()
+                ShapesHandler()
+            End If
             MyCanvas.Children.Remove(p)
             MyCanvas.children.Remove(currentShadow)
+            IsRowFull(grid)
+            IsColFull(grid)
+        Else
+            ResetShape(p, shapes.IndexOf(p))
+            Exit Sub
+
         End If
     End Sub
 
+    Function ReloadShapes() As List(Of Path)
+        Dim newShapes As New List(Of Path)
+        For i = 0 To 2
+            Dim shape = BuildShape()
+            newShapes.Add(shape)
+        Next
+        Return newShapes
+    End Function
+    Function IsRowFull(grid As Rectangle(,)) As Integer
+
+        For row = 0 To rows - 1
+            Dim rowCount = 0
+            For col = 0 To cols - 1
+                If grid(row, col) IsNot Nothing Then
+                    rowCount += 1
+                End If
+            Next col
+            If rowCount = cols Then
+                For col = 0 To cols - 1
+                    MyCanvas.Children.Remove(grid(row, col))
+                    grid(row, col) = Nothing
+                Next
+            End If
+        Next row
+        Return -1
+    End Function
+    Function IsColFull(grid As Rectangle(,)) As Integer
+        For col = 0 To cols - 1
+            Dim colCount = 0
+            For row = 0 To rows - 1
+                If grid(row, col) IsNot Nothing Then
+                    colCount += 1
+                End If
+            Next row
+            If colCount = rows Then
+                For row = 0 To rows - 1
+                    MyCanvas.Children.Remove(grid(row, col))
+                    grid(row, col) = Nothing
+                Next
+            End If
+        Next col
+        Return -1
+    End Function
 End Class
