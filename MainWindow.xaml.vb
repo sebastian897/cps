@@ -5,15 +5,16 @@ Imports System.Windows.Shapes
 Class MainWindow
 
     Private dragging As Boolean = False
-    Private clickPosition As Point
-    Dim rows As Integer = 9
-    Dim cols As Integer = 9
+    Private clickOffsetOnShape As Point
+    Dim rows As Double = 9
+    Dim cols As Double = 9
     Dim sqrLength As Double = 100
-    Dim shapeskirt = 3
-    Dim spacing As Double = sqrLength / 20  ' space between rectangles
+    Dim shapeskirt = sqrLength * 0.05
+    Dim spacing As Double = sqrLength * 0.05  ' space between rectangles
+    Dim totalSqrLength As Double = sqrLength * 1.05
     Dim extraWindowWidth = 40
     Dim extraWindowHeight = 40
-    Dim piecesHeight As Double = (sqrLength + spacing) * 3
+    Dim piecesHeight As Double = totalSqrLength * 3
 
     Private Function BuildShape() As Path
         ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
@@ -30,7 +31,7 @@ Class MainWindow
                     If j < leftShape Then
                         leftShape = j
                     End If
-                    Dim rectGeometry As New RectangleGeometry(New Rect((i - topShape) * (sqrLength + spacing), (j - leftShape) * (sqrLength + spacing), sqrLength, sqrLength))
+                    Dim rectGeometry As New RectangleGeometry(New Rect((i - topShape) * totalSqrLength, (j - leftShape) * totalSqrLength, sqrLength, sqrLength))
                     geometryGroup.Children.Add(rectGeometry)
                 End If
             Next
@@ -59,8 +60,8 @@ Class MainWindow
             If rg IsNot Nothing Then
                 Dim canvasX = rg.Rect.X
                 Dim canvasY = rg.Rect.Y
-                Dim X = w + canvasX \ (sqrLength + spacing)
-                Dim Y = h + canvasY \ (sqrLength + spacing)
+                Dim X = w + canvasX \ totalSqrLength
+                Dim Y = h + canvasY \ totalSqrLength
                 If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse g(X, Y) IsNot Nothing Then
                     Return False
                 End If
@@ -75,7 +76,7 @@ Class MainWindow
         For row = 0 To rows - 1
             For col = 0 To cols - 1
                 If DoesShapeFit(row, col, p, g) Then
-                    positions.Add(New Point(row, col))
+                    positions.Add(New Point(row * totalSqrLength, col * totalSqrLength))
                 End If
             Next col
         Next row
@@ -92,10 +93,10 @@ Class MainWindow
             End If
             For Each pos In validPos
                 Dim newg = DeepCopyGrid(g)
-                newg = PlaceShapeInGrid(pos, s(i), newg)
+                PlacedShapeInGrid(pos, s(i), newg, False)
                 Dim newShapes As New List(Of Path)(s)
                 newShapes.RemoveAt(i)
-                If CanPLayerPlaceShapes(newg, newShapes, depth + 1) Then
+                If CanPLayerPlaceShapes(newg, newShapes) Then
                     Return True
                 End If
             Next pos
@@ -108,29 +109,28 @@ Class MainWindow
         If gg Is Nothing Then Return Nothing
         For row = 0 To rows - 1
             For col = 0 To cols - 1
-                Dim leftPos As Double = col * (sqrLength + spacing)
-                Dim topPos As Double = row * (sqrLength + spacing)
-                If Canvas.GetLeft(p) + sqrLength / 2 > leftPos And Canvas.GetLeft(p) + sqrLength / 2 < leftPos + (sqrLength + spacing) And Canvas.GetTop(p) + sqrLength / 2 > topPos And Canvas.GetTop(p) + sqrLength / 2 < topPos + (sqrLength + spacing) Then
+                Dim gridSquareLeftPos As Double = col * totalSqrLength
+                Dim gridSquareTopPos As Double = row * totalSqrLength
+
+                If Canvas.GetLeft(p) + sqrLength / 2 >= gridSquareLeftPos And
+                    Canvas.GetLeft(p) + sqrLength / 2 <= gridSquareLeftPos + totalSqrLength And
+                    Canvas.GetTop(p) + sqrLength / 2 >= gridSquareTopPos And
+                    Canvas.GetTop(p) + sqrLength / 2 <= gridSquareTopPos + totalSqrLength And
+                    DoesShapeFit(col, row, p, grid) Then
+
                     Dim newp As New Path()
-                    newp.Data = p.Data
+                    newp.Data = p.Data.Clone()
                     newp.Fill = p.Fill
                     newp.Opacity = 0.5
-                    newp.Tag = "shadow"
                     newp.IsHitTestVisible = False
-                    newp.Stroke = Brushes.Green
+                    newp.Stroke = p.Stroke
 
                     ' Optionally, scale around a center point (e.g., center of bounding box)
-                    Dim bounds As Rect = newp.Data.Bounds
-                    Dim centerX As Double = bounds.X + bounds.Width / 2
-                    Dim centerY As Double = bounds.Y + bounds.Height / 2
+                    newp.RenderTransform = Transform.Identity
+                    newp.RenderTransformOrigin = New Point(0, 0)
 
-                    Dim scaleTransform As New ScaleTransform(1, 1, centerX, centerY)
-                    newp.Data.Transform = scaleTransform
-                    If Not DoesShapeFit(col, row, newp, grid) Then
-                        Continue For
-                    End If
-                    Canvas.SetLeft(newp, leftPos)
-                    Canvas.SetTop(newp, topPos)
+                    Canvas.SetLeft(newp, gridSquareLeftPos)
+                    Canvas.SetTop(newp, gridSquareTopPos)
                     Return newp
                 End If
             Next col
@@ -180,8 +180,8 @@ Class MainWindow
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         MyCanvas.Children.Clear()
         shapes = ReloadShapes()
-        Dim totalWidth As Double = cols * (sqrLength + spacing) - spacing
-        Dim totalHeight As Double = rows * (sqrLength + spacing) - spacing + piecesHeight
+        Dim totalWidth As Double = cols * totalSqrLength - spacing
+        Dim totalHeight As Double = rows * totalSqrLength - spacing + piecesHeight
 
         ' Adjust Window size to fit Canvas plus window borders
         Me.WindowStartupLocation = WindowStartupLocation.Manual
@@ -202,8 +202,8 @@ Class MainWindow
                 }
 
                 ' Calculate position on Canvas
-                Dim leftPos As Double = col * (sqrLength + spacing)
-                Dim topPos As Double = row * (sqrLength + spacing)
+                Dim leftPos As Double = col * totalSqrLength
+                Dim topPos As Double = row * totalSqrLength
 
                 Canvas.SetLeft(rect, leftPos)
                 Canvas.SetTop(rect, topPos)
@@ -225,8 +225,8 @@ Class MainWindow
         Dim centerX As Double = bounds.X + bounds.Width / 2
         Dim centerY As Double = bounds.Y + bounds.Height / 2
 
-        Dim scaleTransform As New ScaleTransform(2 / 3, 2 / 3, centerX, centerY)
-        shape.Data.Transform = scaleTransform
+        shape.RenderTransform = New ScaleTransform(2 / 3, 2 / 3)
+        shape.RenderTransformOrigin = New Point(0.5, 0.5)
     End Sub
     Sub ShapesHandler()
         For i = 0 To shapes.Count - 1
@@ -242,67 +242,54 @@ Class MainWindow
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
         dragging = True
         Dim p = DirectCast(sender, Path)
-        clickPosition = e.GetPosition(p)
+        clickOffsetOnShape = e.GetPosition(p)
         p.CaptureMouse()
+        currentShadow = Nothing
     End Sub
     Private Sub Path_MouseMove(sender As Object, e As MouseEventArgs)
-        If dragging Then
-            Dim p = DirectCast(sender, Path)
-            Dim canvasPos = e.GetPosition(MyCanvas)
+        Dim p = DirectCast(sender, Path)
+        If Not shapes.contains(p) OrElse Not p.IsMouseCaptured Then
+            Return
+        End If
 
-            ' Calculate new position taking the click offset into account
-            Dim newLeft = canvasPos.X - clickPosition.X
-            Dim newTop = canvasPos.Y - clickPosition.Y
+        Dim mousePos = e.GetPosition(MyCanvas)
 
-            Canvas.SetLeft(p, newLeft)
-            Canvas.SetTop(p, newTop)
+        ' Calculate new position taking the click offset into account
+        Dim shapeLeft = mousePos.X - clickOffsetOnShape.X
+        Dim shapeTop = mousePos.Y - clickOffsetOnShape.Y
 
-            If currentShadow IsNot Nothing AndAlso MyCanvas.Children.Contains(currentShadow) Then
-                MyCanvas.Children.Remove(currentShadow)
-            End If
+        Canvas.SetLeft(p, shapeLeft)
+        Canvas.SetTop(p, shapeTop)
 
-            ' Create a new shadow
-            Dim sp = BuildShadow(newLeft, newTop, p)
-            If sp IsNot Nothing Then
-                MyCanvas.Children.Add(sp)
-                currentShadow = sp ' store reference to the latest shadow
-            Else
-                currentShadow = Nothing
-            End If
+        If currentShadow IsNot Nothing AndAlso MyCanvas.Children.Contains(currentShadow) Then
+            MyCanvas.Children.Remove(currentShadow)
+        End If
+
+        p.RenderTransformOrigin = New Point(0.5, 0.5)
+
+        ' Create a new shadow
+        Dim shadow = BuildShadow(shapeLeft, shapeTop, p)
+        If shadow IsNot Nothing Then
+            MyCanvas.Children.Add(shadow)
+            currentShadow = shadow ' store reference to the latest shadow
+
+            p.RenderTransform = Transform.Identity
+        Else
+            currentShadow = Nothing
+
+            p.RenderTransform = New ScaleTransform(2 / 3, 2 / 3)
         End If
     End Sub
-
     Private Sub Path_MouseLeftButtonUp(sender As Object, e As MouseButtonEventArgs)
         dragging = False
+        clickOffsetOnShape = New Point()
         Dim p = DirectCast(sender, Path)
         p.ReleaseMouseCapture()
-        Dim gg = TryCast(p.Data, GeometryGroup)
-
         If currentShadow IsNot Nothing Then
-            Dim pathLeft = Canvas.GetLeft(currentShadow)
-            Dim pathTop = Canvas.GetTop(currentShadow)
-
-            For Each rg As RectangleGeometry In gg.Children.OfType(Of RectangleGeometry)()
-                Dim r As New Rectangle With {
-                    .Width = sqrLength,
-                    .Height = sqrLength,
-                    .Fill = p.Fill
-                }
-                Dim canvasX = pathLeft + rg.Rect.X
-                Dim canvasY = pathTop + rg.Rect.Y
-                Dim X = canvasX / (sqrLength + spacing)
-                Dim Y = canvasY / (sqrLength + spacing)
-                If X < 0 Or X > 8 Or Y < 0 Or Y > 8 Then
-                    MyCanvas.children.Remove(currentShadow)
-                    currentShadow = Nothing
-                    ResetShape(p, shapes.IndexOf(p))
-                    Exit Sub
-                End If
-                Canvas.SetLeft(r, canvasX)
-                Canvas.SetTop(r, canvasY)
-                grid(X, Y) = r
-                MyCanvas.Children.Add(r)
-            Next
+            Dim pathLeft = Canvas.GetLeft(currentShadow) / totalSqrLength
+            Dim pathTop = Canvas.GetTop(currentShadow) / totalSqrLength
+            Dim point As New Point(pathLeft, pathTop)
+            PlacedShapeInGrid(point, currentShadow, grid, True)
             shapes.remove(p)
             If shapes.Count = 0 Then
                 shapes = ReloadShapes()
@@ -310,39 +297,40 @@ Class MainWindow
             End If
             MyCanvas.Children.Remove(p)
             MyCanvas.children.Remove(currentShadow)
-            IsRowFull(grid)
-            IsColFull(grid)
         Else
             ResetShape(p, shapes.IndexOf(p))
             Exit Sub
-
         End If
     End Sub
-    Function PlaceShapeInGrid(p As point, pa As path, ByRef g(,) As Rectangle) As Rectangle(,)
+    Sub PlacedShapeInGrid(p As point, pa As path, ByRef g(,) As Rectangle, display As Boolean)
         Dim gg = TryCast(pa.Data, GeometryGroup)
-        If gg Is Nothing Then Return g
-        For i = 0 To gg.Children.OfType(Of RectangleGeometry)().ToList().Count - 1
-            Dim rg = gg.Children.OfType(Of RectangleGeometry)().ToList()(i)
-            If rg IsNot Nothing Then
-                Dim canvasX = rg.Rect.X
-                Dim canvasY = rg.Rect.Y
-                Dim X = p.X + canvasX / (sqrLength + spacing)
-                Dim Y = p.Y + canvasY / (sqrLength + spacing)
-                If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 Then
-                    Return g
+        If gg IsNot Nothing Then
+            For i = 0 To gg.Children.OfType(Of RectangleGeometry)().ToList().Count - 1
+                Dim rg = gg.Children.OfType(Of RectangleGeometry)().ToList()(i)
+                If rg IsNot Nothing Then
+                    Dim canvasX = p.X * totalSqrLength + rg.Rect.X
+                    Dim canvasY = p.Y * totalSqrLength + rg.Rect.Y
+                    Dim X = canvasX / totalSqrLength
+                    Dim Y = canvasY / totalSqrLength
+                    If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 Then
+                        Exit Sub
+                    End If
+                    Dim r = New Rectangle With {
+                            .Width = sqrLength,
+                            .Height = sqrLength,
+                            .Fill = pa.Fill
+                        }
+                    Canvas.SetLeft(r, canvasX)
+                    Canvas.SetTop(r, canvasY)
+                    g(X, Y) = r
+                    If display Then
+                        MyCanvas.Children.Add(r)
+                    End If
                 End If
-                Dim r As New Rectangle With {
-                    .Width = sqrLength,
-                    .Height = sqrLength,
-                    .Fill = pa.Fill
-                }
-                Canvas.SetLeft(r, canvasX)
-                Canvas.SetTop(r, canvasY)
-                g(X, Y) = r
-            End If
-        Next i
-        Return g
-    End Function
+            Next i
+        End If
+        ClearSqrs(g)
+    End Sub
     Function ReloadShapes() As List(Of Path)
         Dim newShapes As New List(Of Path)
         Dim attempts As Integer = 0
@@ -354,10 +342,10 @@ Class MainWindow
                 newShapes.Clear()
             End If
         End While
-
         Return newShapes
     End Function
-    Function IsRowFull(grid As Rectangle(,)) As Integer
+    Function GetFullRows(grid As Rectangle(,)) As list(Of Integer)
+        Dim rowsDeleted As New list(Of Integer)
         For row = 0 To rows - 1
             Dim rowCount = 0
             For col = 0 To cols - 1
@@ -366,15 +354,13 @@ Class MainWindow
                 End If
             Next col
             If rowCount = cols Then
-                For col = 0 To cols - 1
-                    MyCanvas.Children.Remove(grid(row, col))
-                    grid(row, col) = Nothing
-                Next
+                rowsDeleted.Add(row)
             End If
         Next row
-        Return -1
+        Return rowsDeleted
     End Function
-    Function IsColFull(grid As Rectangle(,)) As Integer
+    Function GetFullCols(grid As Rectangle(,)) As list(Of Integer)
+        Dim colsDeleted As New list(Of Integer)
         For col = 0 To cols - 1
             Dim colCount = 0
             For row = 0 To rows - 1
@@ -383,12 +369,32 @@ Class MainWindow
                 End If
             Next row
             If colCount = rows Then
-                For row = 0 To rows - 1
-                    MyCanvas.Children.Remove(grid(row, col))
-                    grid(row, col) = Nothing
-                Next
+                colsDeleted.Add(col)
             End If
         Next col
-        Return -1
+        Return colsDeleted
     End Function
+    Sub ClearSqrs(g(,) As Rectangle)
+        Dim colsDeleted = GetFullCols(grid)
+        Dim rowsDeleted = GetFullRows(grid)
+        If colsDeleted.Count = 0 And rowsDeleted.Count = 0 Then
+            Exit Sub
+        End If
+        For col = 0 To colsDeleted.Count - 1
+            For row = 0 To rows - 1
+                If grid(row, colsDeleted(col)) IsNot Nothing Then
+                    MyCanvas.Children.Remove(grid(row, colsDeleted(col)))
+                    grid(row, colsDeleted(col)) = Nothing
+                End If
+            Next
+        Next
+        For row = 0 To rowsDeleted.Count - 1
+            For col = 0 To cols - 1
+                If grid(rowsDeleted(row), col) IsNot Nothing Then
+                    MyCanvas.Children.Remove(grid(rowsDeleted(row), col))
+                    grid(rowsDeleted(row), col) = Nothing
+                End If
+            Next
+        Next
+    End Sub
 End Class
