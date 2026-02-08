@@ -1,20 +1,26 @@
 ﻿Imports System.Windows.Ink
 Imports System.Windows.Media
 Imports System.Windows.Shapes
+Imports System.Windows.Forms
+Imports System.Windows.Interop
 
 Class MainWindow
 
     Private dragging As Boolean = False
     Private clickOffsetOnShape As Point
-    Dim rows As Double = 9
-    Dim cols As Double = 9
-    Dim sqrLength As Double = 100
+    Dim rows As Double = 15
+    Dim cols As Double = 15
+    Dim sqrLength As Double = 50
     Dim shapeskirt = sqrLength * 0.05
     Dim spacing As Double = sqrLength * 0.05  ' space between rectangles
     Dim totalSqrLength As Double = sqrLength * 1.05
-    Dim extraWindowWidth = 40
-    Dim extraWindowHeight = 40
-    Dim piecesHeight As Double = totalSqrLength * 3
+    Dim extraWindowWidth = sqrLength / 2
+    Dim extraWindowHeight = sqrLength / 2
+    Dim pieceLength As Double = 3
+    Dim sqaureProbability As Double = 0.75
+    Dim pieceScaleSize As Double = 2 / 3
+    Dim numberOfShapes As Double = 6
+    Dim piecesPerGridLength As Double = Math.Floor(cols / pieceLength)
 
     Private Function BuildShape() As Path
         ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
@@ -23,9 +29,9 @@ Class MainWindow
         Do
             Dim topShape As Double = Double.MaxValue
             Dim leftShape As Double = Double.MaxValue
-            For Y = 0 To 2
-                For X = 0 To 2
-                    If rand.Next(0, 4) > 0 Then
+            For Y = 0 To pieceLength - 1
+                For X = 0 To pieceLength - 1
+                    If rand.NextDouble() < sqaureProbability Then
                         If topShape > Y Then
                             topShape = Y
                         End If
@@ -43,7 +49,7 @@ Class MainWindow
                 .Data = geometryGroup,
                 .Fill = RandomBrush()
             }
-            Return path
+        Return path
     End Function
 
     Private Function RandomBrush() As SolidColorBrush
@@ -64,7 +70,7 @@ Class MainWindow
                 Dim canvasY = rg.Rect.Y
                 Dim X As Integer = w + CInt(Math.Floor(canvasX / totalSqrLength))
                 Dim Y As Integer = h + CInt(Math.Floor(canvasY / totalSqrLength))
-                If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 OrElse g(X, Y) IsNot Nothing Then
+                If X < 0 OrElse X > cols - 1 OrElse Y < 0 OrElse Y > rows - 1 OrElse g(X, Y) IsNot Nothing Then
                     Return False
                 End If
                 'Debug.WriteLine($"Checking shape square at grid[{X}, {Y}] - occupied? {(g(X, Y) IsNot Nothing)}")
@@ -173,12 +179,9 @@ Class MainWindow
         Return newShapes
     End Function
     Function DeepCopyGrid(originalGrid As Rectangle(,)) As Rectangle(,)
-        Dim cols = originalGrid.GetLength(0)
-        Dim rows = originalGrid.GetLength(1)
         Dim newGrid(cols - 1, rows - 1) As Rectangle
-
-        For Y As Integer = 0 To rows - 1
-            For X As Integer = 0 To cols - 1
+        For Y = 0 To rows - 1
+            For X = 0 To cols - 1
                 If originalGrid(X, Y) IsNot Nothing Then
                     ' Create a new Rectangle with the same properties
                     Dim r As New Rectangle With {
@@ -201,13 +204,14 @@ Class MainWindow
         Return newGrid
     End Function
     Private currentShadow As Path
-    Private grid(8, 8) As Rectangle
+    Private grid(cols - 1, rows - 1) As Rectangle
     Dim shapes As New List(Of Path)
     Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         MyCanvas.Children.Clear()
         shapes = ReloadShapes()
-        Dim totalWidth As Double = rows * totalSqrLength - spacing
-        Dim totalHeight As Double = cols * totalSqrLength - spacing + piecesHeight
+        Dim numberOfRowsOfPieces As Double = Math.Ceiling(numberOfShapes / piecesPerGridLength)
+        Dim totalWidth As Double = cols * totalSqrLength - spacing
+        Dim totalHeight As Double = rows * totalSqrLength - spacing + (totalSqrLength * numberOfRowsOfPieces * pieceLength)
 
         ' Adjust Window size to fit Canvas plus window borders
         Me.WindowStartupLocation = WindowStartupLocation.Manual
@@ -243,15 +247,15 @@ Class MainWindow
         ShapesHandler()
     End Sub
     Sub ResetShape(shape, i)
-        Canvas.SetLeft(shape, i * piecesHeight)
-        Canvas.SetTop(shape, piecesHeight * 3)
+        Canvas.SetLeft(shape, (i Mod piecesPerGridLength) * totalSqrLength * pieceLength)
+        Canvas.SetTop(shape, totalSqrLength * (rows + (Math.Floor(i / piecesPerGridLength) * pieceLength)))
 
         ' Optionally, scale around a center point (e.g., center of bounding box)
         Dim bounds As Rect = shape.Data.Bounds
         Dim centerX As Double = bounds.X + bounds.Width / 2
         Dim centerY As Double = bounds.Y + bounds.Height / 2
 
-        shape.RenderTransform = New ScaleTransform(2 / 3, 2 / 3)
+        shape.RenderTransform = New ScaleTransform(pieceScaleSize, pieceScaleSize)
         shape.RenderTransformOrigin = New Point(0.5, 0.5)
     End Sub
     Sub ShapesHandler()
@@ -275,7 +279,6 @@ Class MainWindow
         Panel.SetZIndex(el, maxZ + 1)
     End Sub
     Private Sub Path_MouseLeftButtonDown(sender As Object, e As MouseButtonEventArgs)
-        dragging = True
         Dim p = DirectCast(sender, Path)
         clickOffsetOnShape = e.GetPosition(p)
         p.CaptureMouse()
@@ -309,10 +312,8 @@ Class MainWindow
         If shadow IsNot Nothing Then
             MyCanvas.Children.Add(shadow)
             currentShadow = shadow ' store reference to the latest shadow
-
         Else
             currentShadow = Nothing
-
         End If
     End Sub
     Private Sub Path_MouseLeftButtonUp(sender As Object, e As MouseButtonEventArgs)
@@ -351,9 +352,6 @@ Class MainWindow
                     Dim canvasY = p.Y + rg.Rect.Y
                     Dim X As Integer = CInt(Math.Floor(canvasX / totalSqrLength))
                     Dim Y As Integer = CInt(Math.Floor(canvasY / totalSqrLength))
-                    If X < 0 OrElse X > 8 OrElse Y < 0 OrElse Y > 8 Then
-                        Return True
-                    End If
                     Dim r = New Rectangle With {
                             .Width = sqrLength,
                             .Height = sqrLength,
@@ -375,12 +373,12 @@ Class MainWindow
     Function ReloadShapes() As List(Of Path)
         Dim newShapes As New List(Of Path)
         Dim attempts As Integer = 0
-        While newShapes.Count < 3
+        While newShapes.Count < numberOfShapes
             Dim shape = BuildShape()
             newShapes.Add(shape)
             If Not CanPLayerPlaceShapes(DeepCopyGrid(grid), newShapes) Then
                 attempts += 1
-                newShapes.Remove(shape)
+                newShapes.Clear()
             End If
         End While
         Return newShapes
