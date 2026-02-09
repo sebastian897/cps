@@ -12,9 +12,9 @@ Namespace cps
 
         Private dragging As Boolean = False
         Private clickOffsetOnShape As Point
-        Dim windowSize As Double = 2 / 3
-        Dim rows As Double = 5
-        Dim cols As Double = 5
+        Dim windowSize As Double = 4 / 5
+        Dim rows As Double = 9
+        Dim cols As Double = 9
         Dim sqrLength As Double
         Dim sqrSpacing As Double = 1.05
         Dim shapeskirt As Double
@@ -24,7 +24,7 @@ Namespace cps
         Dim pieceLength As Double = 3
         Dim sqaureProbability As Double = 0.75
         Dim pieceScaleSize As Double = 2 / 3
-        Dim numberOfShapes As Double = 6
+        Dim numberOfShapes As Double = 3
         Dim piecesPerGridLength As Double = Math.Floor(rows / pieceLength)
         Dim numberOfRowsOfPieces As Double = Math.Ceiling(numberOfShapes / piecesPerGridLength)
 
@@ -116,6 +116,15 @@ Namespace cps
                         'Debug.WriteLine($"recursion failed")
                     End If
                 Next pos
+            Next i
+            Return False
+        End Function
+        Function CanPlaceAShape(ByRef g(,) As Rectangle, ByRef s As List(Of Path)) As Boolean
+            For i = s.Count - 1 To 0 Step -1
+                Dim validPos = GetValidPositions(s(i), g)
+                If validPos.Count > 0 Then
+                    Return True
+                End If
             Next i
             Return False
         End Function
@@ -248,7 +257,6 @@ Namespace cps
                     Dim leftPos As Double = X * totalSqrLength
                     Dim topPos As Double = Y * totalSqrLength
 
-                    Debug.Print($"Drawing grid square at ({X}, {Y}) - Canvas position: ({leftPos}, {topPos})")
                     Canvas.SetLeft(r, leftPos)
                     Canvas.SetTop(r, topPos)
 
@@ -256,21 +264,16 @@ Namespace cps
                 Next
             Next
         End Sub
-        Private Sub Window_ResizeEnded(sender As Object, e As EventArgs)
-            ' This will run after resizing stops (after 300ms delay)
-            Debug.WriteLine("Resize ended!")
-            SetWindowSize()
-        End Sub
         Sub ResetSizingParameters()
             Dim scr = System.Windows.Forms.Screen.FromHandle(New System.Windows.Interop.WindowInteropHelper(Me).Handle)
             Dim screenW = scr.Bounds.Width
             Dim screenH = scr.Bounds.Height
-            If screenH / rows > screenW / (cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength)) Then
+            'Debug.WriteLine($"verticle sqr = {screenH / rows} horizontal = {screenW / (cols + (numberOfRowsOfPieces * pieceLength)) }")
+            If screenH / rows < screenW / (cols + (numberOfRowsOfPieces * pieceLength)) Then
                 totalSqrLength = Math.Floor(screenH * windowSize / rows)
             Else
                 totalSqrLength = Math.Floor(screenW * windowSize / (cols + (numberOfRowsOfPieces * pieceLength)))
             End If
-            Debug.WriteLine($"sW, sH = {screenW} {screenH}")
             sqrLength = Math.Floor(totalSqrLength / sqrSpacing)
             extraWindowWidth = 0
             extraWindowHeight = 0
@@ -278,9 +281,9 @@ Namespace cps
         Sub SetWindowSize()
             ResetSizingParameters()
             Dim totalWidth As Double = cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength) + extraWindowWidth
-            Debug.WriteLine($"rows * totalSqrLength + extraWindowHeight {rows}, {totalSqrLength}, {extraWindowHeight}")
+            'Debug.WriteLine($"rows * totalSqrLength + extraWindowHeight {rows}, {totalSqrLength}, {extraWindowHeight}")
             Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight
-            Debug.WriteLine($"Calculated window size: {totalWidth}x{totalHeight}")
+            'Debug.WriteLine($"Calculated window size: {totalWidth}x{totalHeight}")
             Dim chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
             Dim chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
             Me.Width = totalWidth + chromeWidth
@@ -380,8 +383,11 @@ Namespace cps
                 End If
                 MyCanvas.Children.Remove(p)
                 MyCanvas.Children.Remove(currentShadow)
+                If Not CanPlaceAShape(grid, shapes) Then
+                    Me.Close()
+                End If
             Else
-                ResetShape(p, shapes.IndexOf(p))
+                    ResetShape(p, shapes.IndexOf(p))
                 Exit Sub
             End If
         End Sub
