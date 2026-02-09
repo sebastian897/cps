@@ -12,6 +12,7 @@ Namespace cps
 
         Private dragging As Boolean = False
         Private clickOffsetOnShape As Point
+        Dim scoreHeight As Double
         Dim windowSize As Double = 4 / 5
         Dim rows As Double = 9
         Dim cols As Double = 9
@@ -221,18 +222,37 @@ Namespace cps
         Private currentShadow As Path
         Private grid(cols - 1, rows - 1) As Rectangle
         Dim shapes As New List(Of Path)
+        Dim score As Integer = 0
+        Dim txt As New TextBlock()
+        Sub DrawScore()
+            ScoreCanvas.Children.Remove(txt)
+            txt.Text = score
+            txt.FontSize = totalSqrLength
+            txt.Foreground = Brushes.White
+            txt.FontWeight = FontWeights.Bold
+            txt.Measure(New Size(Double.PositiveInfinity, Double.PositiveInfinity))
+            Dim textWidth = txt.DesiredSize.Width
+            scoreHeight = txt.DesiredSize.Height
+            ScoreCanvas.Height = scoreHeight
+            Canvas.SetLeft(txt, (totalSqrLength * cols - textWidth) / 2)
+            Canvas.SetTop(txt, 0)
+            ScoreCanvas.Children.Add(txt)
+        End Sub
+        Sub UpdateScore(value As Integer)
+            txt.Text = value
+            txt.Measure(New Size(Double.PositiveInfinity, Double.PositiveInfinity))
+            Dim textWidth = txt.DesiredSize.Width
+            Canvas.SetLeft(txt, (totalSqrLength * cols - textWidth) / 2)
+        End Sub
         Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
             MyCanvas.Children.Clear()
-            SetWindowSize()
-
-            shapes = ReloadShapes()
-
-            ' Adjust Window size to fit Canvas plus window borders
             Me.WindowStartupLocation = WindowStartupLocation.CenterScreen
             Me.ResizeMode = ResizeMode.NoResize
             Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
+            ScoreCanvas.Height = 200
+            SetWindowSize()
 
-            ' Set Canvas size explicitly
+            shapes = ReloadShapes()
             ShapesHandler()
         End Sub
 
@@ -269,8 +289,8 @@ Namespace cps
             Dim screenW = scr.Bounds.Width
             Dim screenH = scr.Bounds.Height
             'Debug.WriteLine($"verticle sqr = {screenH / rows} horizontal = {screenW / (cols + (numberOfRowsOfPieces * pieceLength)) }")
-            If screenH / rows < screenW / (cols + (numberOfRowsOfPieces * pieceLength)) Then
-                totalSqrLength = Math.Floor(screenH * windowSize / rows)
+            If screenH / (rows + 1) < screenW / (cols + (numberOfRowsOfPieces * pieceLength)) Then
+                totalSqrLength = Math.Floor(screenH * windowSize / (rows + 1))
             Else
                 totalSqrLength = Math.Floor(screenW * windowSize / (cols + (numberOfRowsOfPieces * pieceLength)))
             End If
@@ -280,9 +300,10 @@ Namespace cps
         End Sub
         Sub SetWindowSize()
             ResetSizingParameters()
+            DrawScore()
             Dim totalWidth As Double = cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength) + extraWindowWidth
             'Debug.WriteLine($"rows * totalSqrLength + extraWindowHeight {rows}, {totalSqrLength}, {extraWindowHeight}")
-            Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight
+            Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight + scoreHeight
             'Debug.WriteLine($"Calculated window size: {totalWidth}x{totalHeight}")
             Dim chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
             Dim chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
@@ -387,10 +408,15 @@ Namespace cps
                     Me.Close()
                 End If
             Else
-                    ResetShape(p, shapes.IndexOf(p))
+                ResetShape(p, shapes.IndexOf(p))
                 Exit Sub
             End If
         End Sub
+        Function HowManyRectanglesInShape(p As Path) As Integer
+            Dim gg = TryCast(p.Data, GeometryGroup)
+            If gg Is Nothing Then Return 0
+            Return gg.Children.OfType(Of RectangleGeometry)().Count()
+        End Function
         Function PlacedShapeInGrid(p As Point, pa As Path, ByRef g(,) As Rectangle, display As Boolean, pai As Integer) As Boolean
             Dim gg = TryCast(pa.Data, GeometryGroup)
             If gg IsNot Nothing Then
@@ -416,7 +442,11 @@ Namespace cps
                     End If
                 Next i
             End If
-            ClearSqrs(g)
+            Dim sqrsDeleted = ClearSqrs(g)
+            If display Then
+                score += sqrsDeleted
+                UpdateScore(score)
+            End If
             Return True
         End Function
         Function ReloadShapes() As List(Of Path)
@@ -462,11 +492,12 @@ Namespace cps
             Next X
             Return colsDeleted
         End Function
-        Sub ClearSqrs(ByRef g(,) As Rectangle)
+        Function ClearSqrs(ByRef g(,) As Rectangle) As Integer
             Dim colsDeleted = GetFullCols(g)
             Dim rowsDeleted = GetFullRows(g)
+            Dim sqrsDeleted As Integer = 0
             If colsDeleted.Count = 0 And rowsDeleted.Count = 0 Then
-                Exit Sub
+                Return 0
             End If
             For Y = 0 To rows - 1
                 For X = 0 To cols - 1
@@ -475,9 +506,11 @@ Namespace cps
                             MyCanvas.Children.Remove(g(X, Y))  ' Remove from canvas only if present
                         End If
                         g(X, Y) = Nothing
+                        sqrsDeleted += 1
                     End If
                 Next
             Next
-        End Sub
+            Return sqrsDeleted
+        End Function
     End Class
 End Namespace
