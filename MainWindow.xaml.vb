@@ -12,9 +12,11 @@ Namespace cps
 
         Private dragging As Boolean = False
         Private clickOffsetOnShape As Point
-        Dim rows As Double = 15
-        Dim cols As Double = 15
+        Dim windowSize As Double = 2 / 3
+        Dim rows As Double = 5
+        Dim cols As Double = 5
         Dim sqrLength As Double
+        Dim sqrSpacing As Double = 1.05
         Dim shapeskirt As Double
         Dim totalSqrLength As Double
         Dim extraWindowWidth As Double
@@ -23,7 +25,8 @@ Namespace cps
         Dim sqaureProbability As Double = 0.75
         Dim pieceScaleSize As Double = 2 / 3
         Dim numberOfShapes As Double = 6
-        Dim piecesPerGridLength As Double = Math.Floor(cols / pieceLength)
+        Dim piecesPerGridLength As Double = Math.Floor(rows / pieceLength)
+        Dim numberOfRowsOfPieces As Double = Math.Ceiling(numberOfShapes / piecesPerGridLength)
 
         Private Function BuildShape() As Path
             ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
@@ -211,91 +214,83 @@ Namespace cps
         Dim shapes As New List(Of Path)
         Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
             MyCanvas.Children.Clear()
-            InitializeComponent()
             SetWindowSize()
-
-
-            ' Setup the timer for resize end detection
-            resizeTimer = New DispatcherTimer()
-            resizeTimer.Interval = TimeSpan.FromMilliseconds(300) ' wait 300ms after last resize event
-            AddHandler resizeTimer.Tick, AddressOf ResizeTimer_Tick
-
-            AddHandler Me.SizeChanged, AddressOf Window_SizeChanged
-            AddHandler Me.ResizeEnded, AddressOf Window_ResizeEnded
 
             shapes = ReloadShapes()
 
             ' Adjust Window size to fit Canvas plus window borders
             Me.WindowStartupLocation = WindowStartupLocation.CenterScreen
-            Me.SizeToContent = SizeToContent.Manual
-            Me.ResizeMode = ResizeMode.CanResize
+            Me.ResizeMode = ResizeMode.NoResize
             Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
 
-            For Y = 0 To rows - 1
-                For X = 0 To cols - 1
-                    Dim rect As New Rectangle With {
-                        .Width = sqrLength,
-                        .Height = sqrLength,
-                        .Fill = New SolidColorBrush(Color.FromRgb(30, 30, 30)),
-                        .StrokeThickness = shapeskirt,
-                        .Stroke = New SolidColorBrush(Color.FromRgb(42, 42, 42))
-                    }
-
-                    ' Calculate position on Canvas
-                    Dim leftPos As Double = X * totalSqrLength
-                    Dim topPos As Double = Y * totalSqrLength
-
-                    Canvas.SetLeft(rect, leftPos)
-                    Canvas.SetTop(rect, topPos)
-
-                    MyCanvas.Children.Add(rect)
-                Next
-            Next
             ' Set Canvas size explicitly
             ShapesHandler()
         End Sub
 
 
-        Sub InitialliseCanvas()
+        Sub DrawCanvas()
+            MyCanvas.Children.Clear()
+            For Y = 0 To rows - 1
+                For X = 0 To cols - 1
+                    Dim r As New Rectangle
+                    If grid(X, Y) IsNot Nothing Then
+                        r.Fill = grid(X, Y).Fill
+                        r.Stroke = grid(X, Y).Stroke
+                    Else
+                        r.Fill = New SolidColorBrush(Color.FromRgb(30, 30, 30))
+                        r.Stroke = New SolidColorBrush(Color.FromRgb(42, 42, 42))
+                    End If
 
-        End Sub
-        Private Sub Window_SizeChanged(sender As Object, e As SizeChangedEventArgs)
-            ' Restart timer every time size changes
-            resizeTimer.Stop()
-            resizeTimer.Start()
-        End Sub
+                    r.Width = sqrLength
+                    r.Height = sqrLength
+                    r.StrokeThickness = shapeskirt
+                    ' Calculate position on Canvas
+                    Dim leftPos As Double = X * totalSqrLength
+                    Dim topPos As Double = Y * totalSqrLength
 
-        Private Sub ResizeTimer_Tick(sender As Object, e As EventArgs)
-            resizeTimer.Stop()
-            RaiseEvent ResizeEnded(Me, EventArgs.Empty)
-        End Sub
+                    Debug.Print($"Drawing grid square at ({X}, {Y}) - Canvas position: ({leftPos}, {topPos})")
+                    Canvas.SetLeft(r, leftPos)
+                    Canvas.SetTop(r, topPos)
 
+                    MyCanvas.Children.Add(r)
+                Next
+            Next
+        End Sub
         Private Sub Window_ResizeEnded(sender As Object, e As EventArgs)
             ' This will run after resizing stops (after 300ms delay)
             Debug.WriteLine("Resize ended!")
             SetWindowSize()
         End Sub
         Sub ResetSizingParameters()
-            sqrLength = Math.Floor(Me.Height / rows / 20) * 20
-            shapeskirt = sqrLength * 0.05
-            totalSqrLength = sqrLength * 1.05
-            extraWindowWidth = sqrLength / 2
-            extraWindowHeight = sqrLength / 2
+            Dim scr = System.Windows.Forms.Screen.FromHandle(New System.Windows.Interop.WindowInteropHelper(Me).Handle)
+            Dim screenW = scr.Bounds.Width
+            Dim screenH = scr.Bounds.Height
+            If screenH / rows > screenW / (cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength)) Then
+                totalSqrLength = Math.Floor(screenH * windowSize / rows)
+            Else
+                totalSqrLength = Math.Floor(screenW * windowSize / (cols + (numberOfRowsOfPieces * pieceLength)))
+            End If
+            Debug.WriteLine($"sW, sH = {screenW} {screenH}")
+            sqrLength = Math.Floor(totalSqrLength / sqrSpacing)
+            extraWindowWidth = 0
+            extraWindowHeight = 0
         End Sub
-        Function SetWindowSize()
+        Sub SetWindowSize()
             ResetSizingParameters()
-            Dim numberOfRowsOfPieces As Double = Math.Ceiling(numberOfShapes / piecesPerGridLength)
             Dim totalWidth As Double = cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength) + extraWindowWidth
+            Debug.WriteLine($"rows * totalSqrLength + extraWindowHeight {rows}, {totalSqrLength}, {extraWindowHeight}")
             Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight
             Debug.WriteLine($"Calculated window size: {totalWidth}x{totalHeight}")
-            Me.Width = totalWidth  ' Add some margin for window chrome
-            Me.Height = totalHeight
+            Dim chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
+            Dim chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
+            Me.Width = totalWidth + chromeWidth
+            Me.Height = totalHeight + chromeHeight
             MyCanvas.Width = totalWidth
             MyCanvas.Height = totalHeight
-        End Function
-
+            DrawCanvas()
+        End Sub
         Sub ResetShape(shape, i)
-            Canvas.SetLeft(shape, totalSqrLength * (rows + (Math.Floor(i / piecesPerGridLength) * pieceLength)))
+            Canvas.SetLeft(shape, totalSqrLength * (cols + (Math.Floor(i / piecesPerGridLength) * pieceLength)))
             Canvas.SetTop(shape, (i Mod piecesPerGridLength) * totalSqrLength * pieceLength)
 
             ' Optionally, scale around a center point (e.g., center of bounding box)
