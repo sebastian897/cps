@@ -1,4 +1,5 @@
-﻿Imports System.Windows.Forms
+﻿Imports System.Runtime.Intrinsics.Arm
+Imports System.Windows.Forms
 Imports System.Windows.Threading
 
 Namespace cps
@@ -8,7 +9,6 @@ Namespace cps
         Private resizeTimer As DispatcherTimer
 
         Public Event ResizeEnded As EventHandler
-
 
         Private dragging As Boolean = False
         Private clickOffsetOnShape As Point
@@ -28,7 +28,8 @@ Namespace cps
         Dim numberOfShapes As Double = 3
         Dim piecesPerGridLength As Double = Math.Floor(rows / pieceLength)
         Dim numberOfRowsOfPieces As Double = Math.Ceiling(numberOfShapes / piecesPerGridLength)
-
+        Dim chromeHeight As Double
+        Dim chromeWidth As Double
         Private Function BuildShape() As Path
             ' Generate a random integer between 0 (inclusive) and 100 (exclusive)
             Dim rand As New Random()
@@ -225,20 +226,21 @@ Namespace cps
         Dim score As Integer = 0
         Dim txt As New TextBlock()
         Sub DrawScore()
-            ScoreCanvas.Children.Remove(txt)
-            txt.Text = score
+            ScoreCanvas.Children.Clear()
+            txt = New TextBlock()
+            txt.Text = 0
             txt.FontSize = totalSqrLength
             txt.Foreground = Brushes.White
             txt.FontWeight = FontWeights.Bold
-            txt.Measure(New Size(Double.PositiveInfinity, Double.PositiveInfinity))
+            txt.Measure(New Size(totalSqrLength * 2, totalSqrLength * 2))
             Dim textWidth = txt.DesiredSize.Width
             scoreHeight = txt.DesiredSize.Height
-            ScoreCanvas.Height = scoreHeight
+            ScoreCanvas.Height = txt.DesiredSize.Height
             Canvas.SetLeft(txt, (totalSqrLength * cols - textWidth) / 2)
             Canvas.SetTop(txt, 0)
             ScoreCanvas.Children.Add(txt)
         End Sub
-        Sub UpdateScore(value As Integer)
+        Sub UpdateScore(ByRef value As Integer)
             txt.Text = value
             txt.Measure(New Size(Double.PositiveInfinity, Double.PositiveInfinity))
             Dim textWidth = txt.DesiredSize.Width
@@ -249,7 +251,8 @@ Namespace cps
             Me.WindowStartupLocation = WindowStartupLocation.CenterScreen
             Me.ResizeMode = ResizeMode.NoResize
             Me.Background = New SolidColorBrush(Color.FromRgb(46, 46, 46))
-            ScoreCanvas.Height = 200
+            chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
+            chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
             SetWindowSize()
 
             shapes = ReloadShapes()
@@ -285,15 +288,19 @@ Namespace cps
             Next
         End Sub
         Sub ResetSizingParameters()
+            Dim dpi = VisualTreeHelper.GetDpi(Me)
             Dim scr = System.Windows.Forms.Screen.FromHandle(New System.Windows.Interop.WindowInteropHelper(Me).Handle)
-            Dim screenW = scr.Bounds.Width
-            Dim screenH = scr.Bounds.Height
-            'Debug.WriteLine($"verticle sqr = {screenH / rows} horizontal = {screenW / (cols + (numberOfRowsOfPieces * pieceLength)) }")
+            Dim screenW = scr.Bounds.Width / dpi.DpiScaleX
+            Dim screenH = scr.Bounds.Height / dpi.DpiScaleY
+            Debug.WriteLine($"screenH {screenH} screenW {screenW}")
+            Debug.WriteLine($"(rows + 1) {(rows + 1)}")
+            Debug.WriteLine($"verticle sqr = {screenH / (rows + 1)} horizontal = {screenW / (cols + (numberOfRowsOfPieces * pieceLength)) }")
             If screenH / (rows + 1) < screenW / (cols + (numberOfRowsOfPieces * pieceLength)) Then
                 totalSqrLength = Math.Floor(screenH * windowSize / (rows + 1))
             Else
                 totalSqrLength = Math.Floor(screenW * windowSize / (cols + (numberOfRowsOfPieces * pieceLength)))
             End If
+            Debug.WriteLine($"totalSqrLength = {totalSqrLength}")
             sqrLength = Math.Floor(totalSqrLength / sqrSpacing)
             extraWindowWidth = 0
             extraWindowHeight = 0
@@ -303,13 +310,12 @@ Namespace cps
             DrawScore()
             Dim totalWidth As Double = cols * totalSqrLength + (totalSqrLength * numberOfRowsOfPieces * pieceLength) + extraWindowWidth
             'Debug.WriteLine($"rows * totalSqrLength + extraWindowHeight {rows}, {totalSqrLength}, {extraWindowHeight}")
-            Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight + scoreHeight
+            Dim totalHeight As Double = rows * totalSqrLength + extraWindowHeight
             'Debug.WriteLine($"Calculated window size: {totalWidth}x{totalHeight}")
-            Dim chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
-            Dim chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
             Me.Width = totalWidth + chromeWidth
-            Me.Height = totalHeight + chromeHeight
+            Me.Height = totalHeight + chromeHeight + scoreHeight
             MyCanvas.Width = totalWidth
+            ScoreCanvas.Width = totalWidth
             MyCanvas.Height = totalHeight
             DrawCanvas()
         End Sub
@@ -405,18 +411,45 @@ Namespace cps
                 MyCanvas.Children.Remove(p)
                 MyCanvas.Children.Remove(currentShadow)
                 If Not CanPlaceAShape(grid, shapes) Then
-                    Me.Close()
+                    EndGame()
                 End If
             Else
                 ResetShape(p, shapes.IndexOf(p))
                 Exit Sub
             End If
         End Sub
-        Function HowManyRectanglesInShape(p As Path) As Integer
-            Dim gg = TryCast(p.Data, GeometryGroup)
-            If gg Is Nothing Then Return 0
-            Return gg.Children.OfType(Of RectangleGeometry)().Count()
-        End Function
+        Sub EndGame()
+            MyCanvas.Children.Clear()
+            MyCanvas.Width = 0
+            MyCanvas.Height = 0
+            ScoreCanvas.Width = Me.Width
+            ScoreCanvas.Height = Me.Height
+            txt.Text = "Game Over!"
+            txt.Foreground = Brushes.Red
+            txt.FontSize = totalSqrLength
+            Canvas.SetTop(txt, Me.Height / 2 - txt.Height / 2)
+            Canvas.SetLeft(txt, Me.Width / 2 - txt.Width / 2)
+
+            Dim btn As New System.Windows.Controls.Button()
+            btn.Width = totalSqrLength
+            btn.Height = totalSqrLength
+            btn.Content = "⟳"
+            btn.FontSize = 16
+            btn.FontWeight = FontWeights.SemiBold
+            btn.Background = Brushes.DodgerBlue
+            btn.Foreground = Brushes.White
+            Canvas.SetTop(btn, (Me.Height / 2 - btn.Height) / 2)
+            Canvas.SetLeft(btn, (Me.Width / 2 - btn.Width) / 2)
+            ScoreCanvas.Children.Add(btn)
+
+            AddHandler btn.Click, AddressOf Button_Click
+        End Sub
+        Sub Button_Click(sender As Object, e As RoutedEventArgs)
+            ClearGrid()
+            SetWindowSize()
+            shapes = ReloadShapes()
+            ShapesHandler()
+        End Sub
         Function PlacedShapeInGrid(p As Point, pa As Path, ByRef g(,) As Rectangle, display As Boolean, pai As Integer) As Boolean
             Dim gg = TryCast(pa.Data, GeometryGroup)
             If gg IsNot Nothing Then
