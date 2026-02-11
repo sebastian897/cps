@@ -3,7 +3,7 @@ Imports System.Windows.Forms
 Imports System.Windows.Threading
 
 Namespace cps
-    Partial Public Class MainWindow
+    Public Class MainWindow
         Inherits Window
 
         Private resizeTimer As DispatcherTimer
@@ -224,6 +224,7 @@ Namespace cps
         Private grid(cols - 1, rows - 1) As Rectangle
         Dim shapes As New List(Of Path)
         Dim score As Integer = 0
+        Dim combo As Integer = 0
         Dim txt As New TextBlock()
         Sub DrawScore()
             ScoreCanvas.Children.Clear()
@@ -246,6 +247,9 @@ Namespace cps
             Dim textWidth = txt.DesiredSize.Width
             Canvas.SetLeft(txt, (totalSqrLength * cols - textWidth) / 2)
         End Sub
+        WithEvents comboTimer As DispatcherTimer
+        Dim comboKept As Boolean = True
+        Dim comboText As New TextBlock()
         Private Sub Window_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
             MyCanvas.Children.Clear()
             Me.WindowStartupLocation = WindowStartupLocation.CenterScreen
@@ -254,11 +258,36 @@ Namespace cps
             chromeHeight = Me.ActualHeight - CType(Me.Content, FrameworkElement).ActualHeight
             chromeWidth = Me.ActualWidth - CType(Me.Content, FrameworkElement).ActualWidth
             SetWindowSize()
+            ComboTimerInit()
+            comboTimer.Start()
 
             shapes = ReloadShapes()
             ShapesHandler()
         End Sub
-
+        Private Sub StartTimer()
+            comboTimer.Stop()  ' Ensure clean state
+            comboTimer.Start()
+        End Sub
+        Sub ComboTimerInit()
+            comboTimer = New DispatcherTimer()
+            comboTimer.Interval = TimeSpan.FromSeconds(20)
+            AddHandler comboTimer.Tick, AddressOf comboEvent
+        End Sub
+        Sub comboEvent()
+            StartTimer()
+            If comboKept Then
+                comboKept = False
+                combo = 0
+                BringToFront(comboText, MyCanvas)
+                comboText.Foreground = Brushes.Red
+                comboText.Text = $"Combo Lost"
+                ShowComboDisplay()
+                comboText.Measure(New Size(Double.MaxValue, Double.MaxValue))
+                Canvas.SetTop(comboText, Me.Height / 2 - comboText.DesiredSize.Height / 2)
+                Canvas.SetLeft(comboText, Me.Width / 2 - comboText.DesiredSize.Width / 2)
+                ' Remove the combo text after a short delay
+            End If
+        End Sub
 
         Sub DrawCanvas()
             MyCanvas.Children.Clear()
@@ -318,6 +347,7 @@ Namespace cps
             ScoreCanvas.Width = totalWidth
             MyCanvas.Height = totalHeight
             DrawCanvas()
+            ComboDisplayInit()
         End Sub
         Sub ResetShape(shape, i)
             Canvas.SetLeft(shape, totalSqrLength * (cols + (Math.Floor(i / piecesPerGridLength) * pieceLength)))
@@ -398,9 +428,15 @@ Namespace cps
                 Dim pathLeft = Canvas.GetLeft(currentShadow)
                 Dim pathTop = Canvas.GetTop(currentShadow)
                 Dim point As New Point(pathLeft, pathTop)
-                PlacedShapeInGrid(point, currentShadow, grid, True, shapes.IndexOf(p))
+                Dim sqrsCleared = PlacedShapeInGrid(point, currentShadow, grid, True, shapes.IndexOf(p))
                 shapes.Remove(p)
                 If shapes.Count = 0 Then
+                    If comboKept Then
+                        combo += 1
+                        ComboDisplay()
+                    End If
+                    comboKept = True
+                    StartTimer()
                     shapes = ReloadShapes()
                     ShapesHandler()
                 Else
@@ -408,6 +444,8 @@ Namespace cps
                         ResetShape(shapes(i), i)
                     Next i
                 End If
+                score += sqrsCleared * (combo + 1)
+                UpdateScore(score)
                 MyCanvas.Children.Remove(p)
                 MyCanvas.Children.Remove(currentShadow)
                 If Not CanPlaceAShape(grid, shapes) Then
@@ -418,28 +456,62 @@ Namespace cps
                 Exit Sub
             End If
         End Sub
+        Sub ComboDisplayInit()
+            comboText.Visibility = Visibility.Collapsed
+            comboText.FontSize = totalSqrLength
+            comboText.FontWeight = FontWeights.Bold
+            MyCanvas.Children.Add(comboText)
+        End Sub
+        Sub ComboDisplay()
+            If combo > 0 Then
+                BringToFront(comboText, MyCanvas)
+                comboText.Foreground = Brushes.Gold
+                comboText.Text = $"Fast x{combo + 1}!"
+                ShowComboDisplay()
+                comboText.Measure(New Size(Double.MaxValue, Double.MaxValue))
+                Canvas.SetTop(comboText, Me.Height / 2 - comboText.DesiredSize.Height / 2)
+                Canvas.SetLeft(comboText, Me.Width / 2 - comboText.DesiredSize.Width / 2)
+                ' Remove the combo text after a short delay
+            End If
+        End Sub
+        Private Async Sub ShowComboDisplay()
+            comboText.Visibility = Visibility.Visible
+            Await Task.Delay(2000) ' 2 seconds
+            comboText.Visibility = Visibility.Collapsed
+        End Sub
         Sub EndGame()
             MyCanvas.Children.Clear()
             MyCanvas.Width = 0
             MyCanvas.Height = 0
             ScoreCanvas.Width = Me.Width
             ScoreCanvas.Height = Me.Height
-            txt.Text = "Game Over!"
-            txt.Foreground = Brushes.Red
+            Dim gameOver As New TextBlock()
+            gameOver.Text = "GameOver"
+            gameOver.Foreground = Brushes.Red
+            gameOver.FontSize = totalSqrLength
+            gameOver.FontWeight = FontWeights.Bold
+            gameOver.Measure(New Size(Double.MaxValue, Double.MaxValue))
+            Canvas.SetTop(gameOver, Me.Height / 2 - gameOver.DesiredSize.Height / 2 - Me.Height / 4)
+            Canvas.SetLeft(gameOver, Me.Width / 2 - gameOver.DesiredSize.Width / 2)
+            ScoreCanvas.Children.Add(gameOver)
+
+            txt.Text = $"Your Score Was {score}"
+            txt.Foreground = Brushes.White
             txt.FontSize = totalSqrLength
-            Canvas.SetTop(txt, Me.Height / 2 - txt.Height / 2)
-            Canvas.SetLeft(txt, Me.Width / 2 - txt.Width / 2)
+            txt.Measure(New Size(Double.MaxValue, Double.MaxValue))
+            Canvas.SetTop(txt, Me.Height / 2 - txt.DesiredSize.Height / 2 - Me.Height / 12)
+            Canvas.SetLeft(txt, Me.Width / 2 - txt.DesiredSize.Width / 2)
 
             Dim btn As New System.Windows.Controls.Button()
             btn.Width = totalSqrLength
             btn.Height = totalSqrLength
             btn.Content = "⟳"
-            btn.FontSize = 16
+            btn.FontSize = totalSqrLength
             btn.FontWeight = FontWeights.SemiBold
             btn.Background = Brushes.DodgerBlue
             btn.Foreground = Brushes.White
-            Canvas.SetTop(btn, (Me.Height / 2 - btn.Height) / 2)
-            Canvas.SetLeft(btn, (Me.Width / 2 - btn.Width) / 2)
+            Canvas.SetTop(btn, Me.Height / 2 - btn.Height / 2 + Me.Height / 6)
+            Canvas.SetLeft(btn, Me.Width / 2 - btn.Width / 2)
             ScoreCanvas.Children.Add(btn)
 
             AddHandler btn.Click, AddressOf Button_Click
@@ -450,7 +522,7 @@ Namespace cps
             shapes = ReloadShapes()
             ShapesHandler()
         End Sub
-        Function PlacedShapeInGrid(p As Point, pa As Path, ByRef g(,) As Rectangle, display As Boolean, pai As Integer) As Boolean
+        Function PlacedShapeInGrid(p As Point, pa As Path, ByRef g(,) As Rectangle, display As Boolean, pai As Integer) As Integer
             Dim gg = TryCast(pa.Data, GeometryGroup)
             If gg IsNot Nothing Then
                 For i = 0 To gg.Children.OfType(Of RectangleGeometry)().ToList().Count - 1
@@ -475,12 +547,7 @@ Namespace cps
                     End If
                 Next i
             End If
-            Dim sqrsDeleted = ClearSqrs(g)
-            If display Then
-                score += sqrsDeleted
-                UpdateScore(score)
-            End If
-            Return True
+            Return ClearSqrs(g)
         End Function
         Function ReloadShapes() As List(Of Path)
             Dim newShapes As New List(Of Path)
